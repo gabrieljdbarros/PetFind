@@ -14,7 +14,7 @@ export default function ModalScreen() {
     </ThemedView>
   );
 }
-
+// Esqueci de apagar, mas não uso nenhum modal (ainda)
 const styles = StyleSheet.create({
   container: {
     flex: 1,

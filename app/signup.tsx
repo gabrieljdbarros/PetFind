@@ -16,6 +16,7 @@ import { users } from "../src/data/users";
 
 export default function CadastroScreen() {
   const [nome, setNome] = useState("");
+  const [email, setEmail] = useState("");
   const [cpf, setCpf] = useState("");
   const [senha, setSenha] = useState("");
   const [senhaVisivel, setSenhaVisivel] = useState(false);
@@ -51,21 +52,25 @@ export default function CadastroScreen() {
   }
 
   function handleCadastro() {
-    if (!nome || !cpf || !senha || !cidade || !cep) {
+    if (!nome || !email || !cpf || !senha || !cidade || !cep) {
       Alert.alert("Erro", "Preencha todos os campos");
+      return;
+    }
+    if (!email.includes("@") || !email.includes(".")) {
+      Alert.alert("Erro", "Digite um e-mail válido");
       return;
     }
     if (senhaErros.length > 0) {
       Alert.alert("Erro", "Corrija os erros antes de continuar");
       return;
     }
-    users.push({ nome, email: cpf, senha });
+    users.push({ nome, email, senha });
     Alert.alert("Sucesso", `Usuário ${nome} cadastrado!`);
     router.replace("/login");
   }
 
-  const progresso = [nome, cpf, senha, cidade, cep].filter(Boolean).length;
-  const totalCampos = 5;
+  const progresso = [nome, email, cpf, senha, cidade, cep].filter(Boolean).length;
+  const totalCampos = 6;
 
   return (
     <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
@@ -94,6 +99,18 @@ export default function CadastroScreen() {
             style={styles.input}
             value={nome}
             onChangeText={setNome}
+            returnKeyType="next"
+          />
+
+          <Text style={styles.label}>E-mail:</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="exemplo@email.com"
+            placeholderTextColor="#AAA"
+            value={email}
+            onChangeText={setEmail}
+            keyboardType="email-address"
+            autoCapitalize="none"
             returnKeyType="next"
           />
 

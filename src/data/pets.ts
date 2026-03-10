@@ -12,6 +12,7 @@ export type Pet = {
   castrado: boolean;
   personalidade: string[];
   imagem?: string;
+  // Precisa mudar o tipo de imagem para deixar de ser somente string, mas por enquanto está só com imagens placeholders.
 };
 
 export const pets: Pet[] = [
