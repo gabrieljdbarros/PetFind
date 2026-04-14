@@ -1,54 +1,55 @@
 import {
-  View,
-  Text,
-  TextInput,
-  Pressable,
-  StyleSheet,
-  Alert,
-  Image,
-  Dimensions,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
+  View, Text, TextInput, Pressable, StyleSheet,
+  Alert, Image, Dimensions, KeyboardAvoidingView,
+  Platform, ScrollView, ActivityIndicator,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
 import { useState } from "react";
-import { users } from "../src/data/users";
-import { setUsuarioLogado } from "../src/state/session";
+import { useFormik } from "formik";
+import * as Yup from "yup";
+import { login as firebaseLogin } from "../src/services/authService";
+import { useSession } from "../src/context/SessionContext";
 
 const { width } = Dimensions.get("window");
 const CURVE_HEIGHT = 280;
 
+const LoginSchema = Yup.object().shape({
+  email: Yup.string().email("E-mail inválido").required("E-mail é obrigatório"),
+  senha: Yup.string().min(6, "Mínimo 6 caracteres").required("Senha é obrigatória"),
+});
+
 export default function LoginScreen() {
-  const [email, setEmail] = useState("");
-  const [senha, setSenha] = useState("");
+  const { setUsuario } = useSession();
   const [senhaVisivel, setSenhaVisivel] = useState(false);
-  const [senhaErros, setSenhaErros] = useState<string[]>([]);
+  const [loading, setLoading] = useState(false);
 
-  function validarSenha(valor: string) {
-    setSenha(valor);
-    const erros: string[] = [];
-    if (valor.length > 0 && valor.length < 8) {
-      erros.push("Senha precisa ter no mínimo 8 dígitos.");
-    }
-    if (valor.length > 0 && !/[!@#$%^&*(),.?":{}|<>]/.test(valor)) {
-      erros.push("Senha precisa ter no mínimo um (1) caracter especial");
-    }
-    setSenhaErros(erros);
-  }
-
-  function handleLogin() {
-    const usuario = users.find(
-      (u) => u.email === email && u.senha === senha
-    );
-    if (!usuario) {
-      Alert.alert("Erro", "Usuário ou senha inválidos");
-      return;
-    }
-    setUsuarioLogado(usuario);
-    router.replace("/(tabs)");
-  }
+  const formik = useFormik({
+    initialValues: { email: "", senha: "" },
+    validationSchema: LoginSchema,
+    validateOnChange: true,
+    validateOnBlur: true,
+    onSubmit: async ({ email, senha }) => {
+      setLoading(true);
+      try {
+        const usuario = await firebaseLogin(email, senha);
+        setUsuario(usuario);
+        router.replace("/(tabs)");
+      } catch (e: any) {
+        const msg =
+          e.code === "auth/invalid-credential" || e.code === "auth/wrong-password"
+            ? "E-mail ou senha incorretos."
+            : e.code === "auth/user-not-found"
+            ? "Usuário não encontrado."
+            : e.code === "auth/too-many-requests"
+            ? "Muitas tentativas. Tente novamente mais tarde."
+            : "Erro ao fazer login. Verifique sua conexão.";
+        Alert.alert("Erro de login", msg);
+      } finally {
+        setLoading(false);
+      }
+    },
+  });
 
   return (
     <SafeAreaView style={styles.safe} edges={["bottom"]}>
@@ -69,54 +70,62 @@ export default function LoginScreen() {
             <View style={styles.curveOverlay} />
           </View>
 
-          {/* Form */}
           <View style={styles.form}>
-            <Text style={styles.label}>E-mail:</Text>
-            <View style={styles.inputRow}>
+            <Text style={styles.welcomeTitle}>Bem-vindo de volta 🐾</Text>
+            <Text style={styles.welcomeSub}>Faça login para continuar</Text>
+
+            <Text style={styles.label}>E-mail</Text>
+            <View style={[styles.inputRow, formik.touched.email && formik.errors.email && styles.inputRowError]}>
               <TextInput
                 style={styles.input}
                 placeholder="exemplo@email.com"
                 keyboardType="email-address"
                 autoCapitalize="none"
-                value={email}
-                onChangeText={setEmail}
+                value={formik.values.email}
+                onChangeText={formik.handleChange("email")}
+                onBlur={formik.handleBlur("email")}
                 returnKeyType="next"
+                editable={!loading}
               />
               <Text style={styles.inputIcon}>@</Text>
             </View>
+            {formik.touched.email && formik.errors.email && (
+              <Text style={styles.errorText}>{formik.errors.email}</Text>
+            )}
 
-            <Text style={styles.label}>Senha:</Text>
-            <View style={styles.inputRow}>
+            <Text style={styles.label}>Senha</Text>
+            <View style={[styles.inputRow, formik.touched.senha && formik.errors.senha && styles.inputRowError]}>
               <TextInput
                 style={styles.input}
-                placeholder="••••••••••••••••"
+                placeholder="••••••••"
                 secureTextEntry={!senhaVisivel}
-                value={senha}
-                onChangeText={validarSenha}
+                value={formik.values.senha}
+                onChangeText={formik.handleChange("senha")}
+                onBlur={formik.handleBlur("senha")}
                 returnKeyType="done"
-                onSubmitEditing={handleLogin}
+                onSubmitEditing={() => formik.handleSubmit()}
+                editable={!loading}
               />
               <Pressable onPress={() => setSenhaVisivel(!senhaVisivel)}>
                 <Text style={styles.inputIcon}>{senhaVisivel ? "🙈" : "👁️"}</Text>
               </Pressable>
             </View>
+            {formik.touched.senha && formik.errors.senha && (
+              <Text style={styles.errorText}>{formik.errors.senha}</Text>
+            )}
 
-            {senhaErros.map((erro, i) => (
-              <Text key={i} style={styles.errorText}>{erro}</Text>
-            ))}
-
-            <Pressable onPress={() => Alert.alert("Em breve", "Funcionalidade ainda não disponível.")}>
-              <Text style={styles.forgotPassword}>Esqueceu sua senha?</Text>
-            </Pressable>
-
-            <Pressable style={styles.button} onPress={handleLogin}>
-              <Text style={styles.buttonText}>Entrar</Text>
+            <Pressable style={styles.button} onPress={() => formik.handleSubmit()} disabled={loading}>
+              {loading ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={styles.buttonText}>Entrar</Text>
+              )}
             </Pressable>
 
             <View style={styles.signupRow}>
-              <Text style={styles.signupText}>Ainda não tem uma conta? </Text>
+              <Text style={styles.signupText}>Ainda não tem conta? </Text>
               <Pressable onPress={() => router.push("/signup")}>
-                <Text style={styles.signupLink}>Inscreva-se agora!</Text>
+                <Text style={styles.signupLink}>Cadastre-se</Text>
               </Pressable>
             </View>
           </View>
@@ -127,101 +136,34 @@ export default function LoginScreen() {
 }
 
 const styles = StyleSheet.create({
-  safe: {
-    flex: 1,
-    backgroundColor: "#fff",
-  },
-  scrollContent: {
-    flexGrow: 1,
-  },
-  imageContainer: {
-    width: "100%",
-    height: CURVE_HEIGHT,
-    overflow: "hidden",
-  },
-  headerImage: {
-    width: "100%",
-    height: "100%",
-    resizeMode: "cover",
-  },
+  safe: { flex: 1, backgroundColor: "#fff" },
+  scrollContent: { flexGrow: 1 },
+  imageContainer: { width: "100%", height: CURVE_HEIGHT, overflow: "hidden" },
+  headerImage: { width: "100%", height: "100%", resizeMode: "cover" },
   curveOverlay: {
-    position: "absolute",
-    bottom: -60,
-    left: -width * 0.1,
-    width: width * 1.2,
-    height: 120,
-    backgroundColor: "#2F80ED",
+    position: "absolute", bottom: -60, left: -width * 0.1,
+    width: width * 1.2, height: 120, backgroundColor: "#2F80ED",
     borderRadius: width * 0.6,
   },
-  form: {
-    flex: 1,
-    paddingHorizontal: 24,
-    paddingTop: 32,
-    paddingBottom: 24,
-  },
-  label: {
-    fontSize: 15,
-    fontWeight: "600",
-    color: "#111",
-    marginBottom: 6,
-  },
+  form: { flex: 1, paddingHorizontal: 24, paddingTop: 28, paddingBottom: 24 },
+  welcomeTitle: { fontSize: 22, fontWeight: "800", color: "#111", marginBottom: 4 },
+  welcomeSub: { fontSize: 14, color: "#888", marginBottom: 28 },
+  label: { fontSize: 14, fontWeight: "600", color: "#333", marginBottom: 6 },
   inputRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: "#CCC",
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    marginBottom: 16,
+    flexDirection: "row", alignItems: "center",
+    borderWidth: 1, borderColor: "#CCC", borderRadius: 10,
+    paddingHorizontal: 14, marginBottom: 4,
   },
-  input: {
-    flex: 1,
-    paddingVertical: 14,
-    fontSize: 15,
-    color: "#111",
-  },
-  inputIcon: {
-    fontSize: 16,
-    color: "#2F80ED",
-    paddingLeft: 8,
-  },
-  errorText: {
-    color: "#D0021B",
-    fontSize: 13,
-    marginTop: -10,
-    marginBottom: 8,
-  },
-  forgotPassword: {
-    color: "#2F80ED",
-    fontSize: 14,
-    textAlign: "right",
-    marginBottom: 32,
-    marginTop: 4,
-  },
+  inputRowError: { borderColor: "#D0021B" },
+  input: { flex: 1, paddingVertical: 14, fontSize: 15, color: "#111" },
+  inputIcon: { fontSize: 16, color: "#2F80ED", paddingLeft: 8 },
+  errorText: { color: "#D0021B", fontSize: 12, marginBottom: 12, marginTop: 2 },
   button: {
-    backgroundColor: "#2F80ED",
-    paddingVertical: 16,
-    borderRadius: 12,
-    alignItems: "center",
-    marginBottom: 20,
+    backgroundColor: "#2F80ED", paddingVertical: 16,
+    borderRadius: 12, alignItems: "center", marginTop: 24, marginBottom: 20,
   },
-  buttonText: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "700",
-  },
-  signupRow: {
-    flexDirection: "row",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  signupText: {
-    fontSize: 14,
-    color: "#444",
-  },
-  signupLink: {
-    fontSize: 14,
-    color: "#2F80ED",
-    fontWeight: "600",
-  },
+  buttonText: { color: "#fff", fontSize: 16, fontWeight: "700" },
+  signupRow: { flexDirection: "row", justifyContent: "center", alignItems: "center" },
+  signupText: { fontSize: 14, color: "#444" },
+  signupLink: { fontSize: 14, color: "#2F80ED", fontWeight: "600" },
 });

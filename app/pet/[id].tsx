@@ -1,24 +1,41 @@
+import { router, useLocalSearchParams } from "expo-router";
+import { useEffect, useState } from "react";
 import {
-  View,
-  Text,
-  StyleSheet,
-  Image,
-  ScrollView,
-  Pressable,
-  Share,
   Alert,
+  Image,
+  Pressable,
+  ScrollView,
+  Share,
+  StyleSheet,
+  Text,
+  View,
 } from "react-native";
-import { useLocalSearchParams, router } from "expo-router";
-import { useState } from "react";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { pets } from "../../src/data/pets";
+import { useFavoritos } from "../../src/context/FavoritosContext";
+import { Pet } from "../../src/data/pets";
+import { buscarPet } from "../../src/services/petsService";
 
 export default function PetDetailsScreen() {
-  const { id } = useLocalSearchParams();
+  const { id } = useLocalSearchParams<{ id: string }>();
   const insets = useSafeAreaInsets();
-  const [favorito, setFavorito] = useState(false);
+  const { isFavorito, toggleFavorito } = useFavoritos();
 
-  const pet = pets.find((item) => item.id === id);
+  const [pet, setPet] = useState<Pet | null>(null);
+
+useEffect(() => {
+  if (id) buscarPet(id).then(setPet);
+}, [id]);
+  const favorito = pet ? isFavorito(pet.id) : false;
+
+  async function handleShare() {
+    try {
+      await Share.share({
+        message: `Olha esse pet incrível para adoção: ${pet!.nome}, ${pet!.raca} em ${pet!.local}!`,
+      });
+    } catch {
+      Alert.alert("Erro", "Não foi possível compartilhar.");
+    }
+  }
 
   if (!pet) {
     return (
@@ -31,18 +48,9 @@ export default function PetDetailsScreen() {
     );
   }
 
-  async function handleShare() {
-    try {
-      await Share.share({
-        message: `Olha esse pet incrível para adoção: ${pet!.nome}, ${pet!.raca} em ${pet!.local}!`,
-      });
-    } catch {
-      Alert.alert("Erro", "Não foi possível compartilhar.");
-    }
-  }
-
   return (
     <View style={styles.safe}>
+      {/* Header */}
       <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
         <Pressable style={styles.headerBtn} onPress={() => router.back()}>
           <Text style={styles.headerBtnText}>‹</Text>
@@ -55,6 +63,7 @@ export default function PetDetailsScreen() {
 
       <ScrollView style={styles.container} contentContainerStyle={styles.content}>
 
+        {/* Imagem */}
         <View style={styles.imageWrapper}>
           {pet.imagem ? (
             <Image source={{ uri: pet.imagem }} style={styles.image} />
@@ -65,7 +74,7 @@ export default function PetDetailsScreen() {
           )}
           <Pressable
             style={[styles.heartButton, favorito && styles.heartButtonActive]}
-            onPress={() => setFavorito(!favorito)}
+            onPress={() => toggleFavorito(pet.id)}
           >
             <Text style={styles.heartIcon}>{favorito ? "❤️" : "🤍"}</Text>
           </Pressable>
@@ -82,7 +91,7 @@ export default function PetDetailsScreen() {
           <Text style={styles.petSpecies}>- {pet.especie}</Text>
         </View>
 
-        {/* Informações */}
+        {/* Badges */}
         <View style={styles.badgesRow}>
           <View style={styles.badge}>
             <Text style={styles.badgeLabel}>Gênero</Text>
@@ -98,14 +107,14 @@ export default function PetDetailsScreen() {
           </View>
         </View>
 
-        {/* Instituição ou o tutor atual */}
+        {/* Instituição */}
         <View style={styles.institutionCard}>
           <View style={styles.institutionAvatar}>
             <Text style={{ fontSize: 22 }}>🏠</Text>
           </View>
           <View style={styles.institutionInfo}>
             <Text style={styles.institutionName}>Canil Doce Lar</Text>
-            <Text style={styles.institutionType}>Instituição</Text>
+            <Text style={styles.institutionType}>Instituição • {pet.local}</Text>
           </View>
           <View style={styles.institutionActions}>
             <Pressable style={styles.institutionBtn} onPress={() => Alert.alert("Ligar", "Em breve!")}>
@@ -145,10 +154,13 @@ export default function PetDetailsScreen() {
         <View style={{ height: 100 }} />
       </ScrollView>
 
+      {/* Botão fixo de adoção */}
       <View style={[styles.bottomBar, { paddingBottom: insets.bottom + 12 }]}>
         <Pressable
-          style={styles.adoptButton}
-          onPress={() => Alert.alert("Adoção", `Você demonstrou interesse em adotar ${pet.nome}!`)}
+          style={[styles.adoptButton, favorito && styles.adoptButtonFav]}
+          onPress={() =>
+            router.push({ pathname: "/solicitacao-adocao", params: { id: pet.id } })
+          }
         >
           <Text style={styles.adoptButtonText}>Quero Adotar!</Text>
         </Pressable>
@@ -177,14 +189,21 @@ const styles = StyleSheet.create({
     position: "absolute", top: 16, right: 16,
     width: 44, height: 44, borderRadius: 22,
     backgroundColor: "#2F80ED", justifyContent: "center", alignItems: "center",
-    shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, shadowRadius: 4, elevation: 4,
+    shadowColor: "#000", shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2, shadowRadius: 4, elevation: 4,
   },
   heartButtonActive: { backgroundColor: "#E8452A" },
   heartIcon: { fontSize: 20 },
-  dots: { position: "absolute", bottom: 12, left: 0, right: 0, flexDirection: "row", justifyContent: "center", gap: 6 },
+  dots: {
+    position: "absolute", bottom: 12, left: 0, right: 0,
+    flexDirection: "row", justifyContent: "center", gap: 6,
+  },
   dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: "rgba(255,255,255,0.5)" },
   dotActive: { backgroundColor: "#fff" },
-  nameRow: { flexDirection: "row", alignItems: "baseline", paddingHorizontal: 20, paddingTop: 20, marginBottom: 16 },
+  nameRow: {
+    flexDirection: "row", alignItems: "baseline",
+    paddingHorizontal: 20, paddingTop: 20, marginBottom: 16,
+  },
   petName: { fontSize: 24, fontWeight: "800", color: "#111" },
   petSpecies: { fontSize: 20, fontWeight: "400", color: "#888" },
   badgesRow: { flexDirection: "row", gap: 10, paddingHorizontal: 20, marginBottom: 20 },
@@ -211,8 +230,12 @@ const styles = StyleSheet.create({
   infoRow: { paddingHorizontal: 20, marginBottom: 20, gap: 6 },
   infoText: { fontSize: 14, color: "#444" },
   infoBold: { fontWeight: "700", color: "#111" },
-  bottomBar: { paddingHorizontal: 20, paddingTop: 12, backgroundColor: "#fff", borderTopWidth: 1, borderTopColor: "#F0F0F0" },
+  bottomBar: {
+    paddingHorizontal: 20, paddingTop: 12,
+    backgroundColor: "#fff", borderTopWidth: 1, borderTopColor: "#F0F0F0",
+  },
   adoptButton: { backgroundColor: "#2F80ED", paddingVertical: 16, borderRadius: 14, alignItems: "center" },
+  adoptButtonFav: { backgroundColor: "#1A6CD4" },
   adoptButtonText: { color: "#fff", fontSize: 17, fontWeight: "700" },
   notFoundText: { fontSize: 18, marginBottom: 16, color: "#333" },
   backButton: { backgroundColor: "#2F80ED", paddingHorizontal: 20, paddingVertical: 12, borderRadius: 12 },
